@@ -1,0 +1,79 @@
+syntax = "proto3";
+
+
+package raftKVRpcProctoc; //所在的命名空间
+
+option cc_generic_services = true;  //开启stub服务
+
+
+//这个是客户端请求服务端有关的rpc
+
+
+// 日志实体
+//和请求有关的
+//日志实体"在这个上下文中可能指的是日志中记录的每个客户端请求或操作。日志条目确保在多个节点之间的一致性
+//并且通常包含关于每个操作的足够信息，以便在系统崩溃或恢复时可以重放这些操作，从而恢复到一致的状态。
+message GetArgs{
+  bytes Key = 1 ;
+  bytes ClientId = 2 ;
+  int32 RequestId = 3;
+}
+
+//这个是和响应有关
+message GetReply  {
+  //	下面几个参数和论文中相同
+  bytes Err = 1;
+  bytes Value = 2;       //由于是分布式存储，重点在于存储，所以应该响应这么简单了，如果要扩展项目功能，那么就需要写稍微多一点的字段了
+
+}
+
+
+// Put or Append
+message PutAppendArgs  {
+  bytes Key = 1;
+  bytes  Value = 2 ;
+  bytes  Op = 3;
+  // "Put" or "Append"
+  // You'll have to add definitions here.
+  // Field names must start with capital letters,
+  // otherwise RPC will break.
+  bytes  ClientId = 4;
+  int32  RequestId = 5;
+}
+
+message PutAppendReply  {
+  bytes Err = 1;
+}
+
+
+//只有raft节点之间才会涉及rpc通信
+service kvServerRpc
+{
+  //PutAppend(args *PutAppendArgs, reply *PutAppendReply)
+  //Get(args *GetArgs, reply *GetReply)
+
+  rpc PutAppend(PutAppendArgs) returns(PutAppendReply);
+  rpc Get (GetArgs) returns (GetReply);
+}
+// message ResultCode
+// {
+//     int32 errcode = 1;
+//     bytes errmsg = 2;
+// }
+
+// message GetFriendsListRequest  //请求，响应
+// {
+//     uint32 userid = 1;
+// }
+
+// message GetFriendsListResponse  //请求，响应
+// {
+//     ResultCode result = 1;
+//     repeated bytes friends = 2;
+// }
+
+// // 好友模块
+// service FiendServiceRpc  //具体的服务模块和服务方法
+// {
+//     rpc GetFriendsList(GetFriendsListRequest) returns(GetFriendsListResponse);
+// }
