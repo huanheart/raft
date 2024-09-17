@@ -35,6 +35,7 @@ void RpcProvider::NotifyService(google::protobuf::Service *service)
 //当一个服务被发布之后，还需要启动别人才能使用
 void RpcProvider::Run(int nodeIndex,short port)
 {
+    //下面先获取当前机器的ip地址，为了保证tcpserver有着对应的ip地址以及端口
     char * ipC;
     char hname[128];
     struct hostent* hent;
@@ -166,7 +167,7 @@ void RpcProvider::OnMessage(const muduo::net::TcpConnectionPtr &conn, muduo::net
         std::cout << "服务：" << service_name << " is not exist!" << std::endl;
         std::cout << "当前已经有的服务列表为:";
         for (auto item : m_serviceMap) {
-        std::cout << item.first << " ";
+            std::cout << item.first << " ";
         }
         std::cout << std::endl;
         return;
@@ -192,11 +193,13 @@ void RpcProvider::OnMessage(const muduo::net::TcpConnectionPtr &conn, muduo::net
 
     // 给下面的method方法的调用，绑定一个Closure的回调函数
     // closure(翻译为关闭，可能是销毁一些内容)是执行完本地方法之后会发生的回调，因此需要完成序列化和反向发送请求的操作
+    //conn表示客户端的连接，即后面回调的数据需要发送给这个客户端
+    //！！！！！重点这个NewCallback是在CallMethod之后发生的，固然response是有数据被序列化的
     google::protobuf::Closure *done =
     google::protobuf::NewCallback<RpcProvider, const muduo::net::TcpConnectionPtr &, google::protobuf::Message *>(
     this, &RpcProvider::SendRpcResponse, conn, response);
 
-    //真正调用方法
+    //真正调用方法（method就是需要调用的方法）
     service->CallMethod(method, nullptr, request, response, done);
 }
 

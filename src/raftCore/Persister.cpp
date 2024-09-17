@@ -43,6 +43,7 @@ void Persister::SaveRaftState(const std::string &data)
     std::lock_guard<std::mutex> lg(m_mtx);
     clearRaftState();
     m_raftStateOutStream << data;
+
     m_raftStateSize += data.size();
 }
 
@@ -91,7 +92,7 @@ Persister::Persister(const int me)
       DPrintf("[func-Persister::Persister] file open error");
     }
     //上面这边主要检查这个文件是否能被正常打开关闭这些，便于在排查的时候，可以查看文件打开是否出现问题
-    //下面绑定流：方便后续可以用，ofstream是输出写文件的类，方便后续写文件用
+    //下面绑定流：方便后续可以用，ofstream是输出写文件的类，方便后续写文件用，即当前这个流可以直接对这个进行快照
     m_raftStateOutStream.open(m_raftStateFileName);
     m_snapshotOutStream.open(m_snapshotFileName);
 }

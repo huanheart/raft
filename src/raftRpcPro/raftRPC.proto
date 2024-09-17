@@ -21,6 +21,7 @@ message AppendEntriesArgs  {
 	int32 LeaderId       =2;
 	int32 PrevLogIndex =3;
 	int32 PrevLogTerm  =4;
+	//repeated这个类型表示数组或者链表，在c++中可以被映射为vector
 	repeated LogEntry Entries  = 5;
 	int32 LeaderCommit  = 6;
 }

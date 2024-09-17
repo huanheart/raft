@@ -20,6 +20,7 @@ void MprpcChannel::CallMethod(const google::protobuf::MethodDescriptor* method,
                               google::protobuf::RpcController* controller, const google::protobuf::Message* request,
                               google::protobuf::Message* response, google::protobuf::Closure* done)
 {
+    //进行重连（或者说一开始没有选择建立连接，固然需要建立连接这里）
     if (m_clientFd == -1) {
         std::string errMsg;
         bool rt = newConnect(m_ip.c_str(), m_port, &errMsg);
@@ -31,7 +32,7 @@ void MprpcChannel::CallMethod(const google::protobuf::MethodDescriptor* method,
             DPrintf("[func-MprpcChannel::CallMethod]连接ip：{%s} port{%d}成功", m_ip.c_str(), m_port);
         }
     }
-
+    //获取当前服务的名称
     const google::protobuf::ServiceDescriptor * sd=method->service(); //得到一个服务描述符,方便知道一些信息
     std::string service_name = sd->name();    
     std::string method_name = method->name();  
@@ -39,7 +40,7 @@ void MprpcChannel::CallMethod(const google::protobuf::MethodDescriptor* method,
     //获取参数的序列化字符串的长度
     uint32_t args_size{};
     std::string args_str;
-    //将其序列化成字符串，方便获取长度
+    //将request其序列化成字符串（这个转化成字符串的意思是转化成protobuf类型的string，并不是从protobuf转化成string）并储存到args_str中，方便获取长度
     if (request->SerializeToString(&args_str)) {
         args_size = args_str.size();
     } else {
@@ -51,7 +52,7 @@ void MprpcChannel::CallMethod(const google::protobuf::MethodDescriptor* method,
     rpcHeader.set_method_name(method_name);
     rpcHeader.set_args_size(args_size);
    
-    //获取头部大小信息
+    //构建头部rpcHeader大小信息并且转化成字符串，方便使用原生api :send进行发送数据(即将刚刚的service_name，method_name这些进行内部的protobuf封装）
     std::string rpc_header_str;
     if (!rpcHeader.SerializeToString(&rpc_header_str)) {
         controller->SetFailed("serialize rpc header error!");
@@ -73,9 +74,11 @@ void MprpcChannel::CallMethod(const google::protobuf::MethodDescriptor* method,
         coded_output.WriteString(rpc_header_str);
     }
 
-    //最后，将请求参数附加到send_rpc_str后面
+    //最后，将请求参数附加到send_rpc_str后面(这个应该就是请求体了）
+    //现在内部序列化已经完毕
     send_rpc_str+= args_str;
     //现在开始发送rpc请求,传的其实就是流，这个string字符串就是流了，由于因为有一些rpc的头部信息，固然要使用该code这个东西
+    //由于服务端有监听到对应的m_clientFd，固然send函数其实就会触发muduo对应的Tcpserver
     while(-1==send(m_clientFd,send_rpc_str.c_str(),send_rpc_str.size(),0) ){
         char errtxt[512] = {0};
         sprintf(errtxt, "send error! errno:%d", errno);
@@ -100,9 +103,9 @@ void MprpcChannel::CallMethod(const google::protobuf::MethodDescriptor* method,
         char errtxt[512] = {0};
         sprintf(errtxt, "recv error! errno:%d", errno);
         controller->SetFailed(errtxt);
-    return;
+        return;
     }
-    //反序列化rpc调用的响应数据
+    //反序列化rpc调用的响应数据,通过grpc中内部的方法，将序列化的数据反序列化给到对应的客户端
     if (!response->ParseFromArray(recv_buf, recv_size)) {
         char errtxt[1050] = {0};
         sprintf(errtxt, "parse error! response_str:%s", recv_buf);
@@ -124,6 +127,7 @@ bool MprpcChannel::newConnect(const char* ip, uint16_t port, string* errMsg)
         *errMsg =errtxt;
         return false;
     }
+    //这里并没有用到bind函数，因为是tcp操作，但是udp就需要进行bind函数操作了
     //绑定套接字
     struct sockaddr_in server_addr;
     server_addr.sin_family = AF_INET;

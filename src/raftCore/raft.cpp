@@ -54,7 +54,7 @@ void Raft::AppendEntries1(const raftRpcProctoc::AppendEntriesArgs* args, raftRpc
     if (matchLog(args->prevlogindex(), args->prevlogterm())){
         //for循环开始
         for(int i=0;i<args->entries_size();i++){
-            auto log=args->entries(i);
+            auto log=args->entries(i); //获取当前日志数组的第i个下标
             if(log.logindex() > getLastLogIndex()){
                 //超过就添加日志，一般来说，都是会进入这里的
                 m_logs.push_back(log);
@@ -119,7 +119,9 @@ bool Raft::sendAppendEntries(int server, std::shared_ptr<raftRpcProctoc::AppendE
     //这个ok是网络是否正常通信的ok，而不是requestVote rpc是否投票的rpc
     //通过调用raftRpcUtil这个类里面的方法，帮助我们调用raft类里面的AppendEntries->AppendEntries1方法进行真正发送
     //当前的控制器是维护在raftRpcUtil类里面的，解耦合的操作
-   
+
+   ////通过调用AppendEntries,内部会使用stub调用对应函数，内部grpc会使用通道，触发callmethod这个函数，然后将对应数据发送过去给对方的privider中间件，使其对应tcpserver接收到
+   ////然后通过tcpserver内部的回调函数，进而继续将通过send函数将对应内容发送到真正的目的地，即这个raft结点，调用他内部的AppendEntries方法
     bool ok = m_peers[server]->AppendEntries(args.get(), reply.get());
     //如果网络有问题
     //发送的时候是阻塞的，固然走到下一步表明发送完毕，并且接收响应完毕
@@ -133,9 +135,9 @@ bool Raft::sendAppendEntries(int server, std::shared_ptr<raftRpcProctoc::AppendE
     }
 
     std::lock_guard<std::mutex> lg1(m_mtx);
-
-    //对reply进行处理
-    // 对于rpc通信，无论什么时候都要检查term
+    ////当调用完之后，此时由于是阻塞的，固然就可以直接做响应了
+    ////对reply进行处理
+    //// 对于rpc通信，无论什么时候都要检查term
     if(reply->term() > m_currentTerm ){
         m_status=Follower;
         m_currentTerm=reply->term();   
@@ -161,7 +163,7 @@ bool Raft::sendAppendEntries(int server, std::shared_ptr<raftRpcProctoc::AppendE
            format("reply.Term{%d} != rf.currentTerm{%d}   ", reply->term(), m_currentTerm));
     //说明任期相同但是日志对应任期不匹配的情况，matchLog返回false的情况
     if (!reply->success()) {
-        //这个应该永远都不为-100吧，任期相同，我看响应方就没有设置-100的时候
+        ////这个应该永远都不为-100吧，任期相同，我看响应方就没有设置-100的时候
         if(reply->updatenextindex() != -100){
             DPrintf("[func -sendAppendEntries  rf{%d}]  返回的日志term相等，但是不匹配，回缩nextIndex[%d]：{%d}\n", m_me,
                     server, reply->updatenextindex());
@@ -169,7 +171,7 @@ bool Raft::sendAppendEntries(int server, std::shared_ptr<raftRpcProctoc::AppendE
         }
 
     }else{
-        //表示成功的追随者+1，用来查看是否多数结点成功的标志
+        ////表示成功的追随者+1，用来查看是否多数结点成功的标志
         *appendNums = *appendNums + 1;
         DPrintf("---------------------------tmp------------------------- 節點{%d}返回true,當前*appendNums{%d}", server,
                 *appendNums);
@@ -309,6 +311,7 @@ void Raft::doHeartBeat()
         DPrintf("[func-Raft::doHeartBeat()-Leader: {%d}] Leader的心跳定时器触发了 index:{%d}\n", m_me, i);
         myAssert(m_nextIndex[i] >= 1, format("rf.nextIndex[%d] = {%d}", i, m_nextIndex[i]));
         //判断是否需要发送快照，如果追随者的部分小于领导者的快照部分，那么就发送快照，因为之前的日志已经被删除了
+        //即领导者不可能将自身删除的日志发送给追随者，固然需要发送快照给他
         if(m_nextIndex[i]<=m_lastSnapshotIncludeIndex){
             std::thread t(&Raft::leaderSendSnapShot, this, i);  // 创建新线程并执行b函数，并传递参数
             t.detach();
@@ -603,7 +606,7 @@ void Raft::init(std::vector<std::shared_ptr<RaftRpcUtil>> peers, int me, std::sh
     m_me = me;
 
     m_mtx.lock();
-    //客户端和raft结点进行通信的部分：
+
     this->applyChan = applyCh;
     m_currentTerm = 0;
     m_status = Follower;
@@ -725,7 +728,7 @@ void Raft::leaderHearBeatTicker()
                     << " 毫秒\033[0m" << std::endl;
             ++atomicCount;
         }
-        //说明有发生心跳
+        //说明有发生心跳(因为时间状态被更新了）
         if (std::chrono::duration<double, std::milli>(m_lastResetHearBeatTime - wakeTime).count() > 0) {
         //睡眠的这段时间有重置定时器，没有超时，再次睡眠
             continue;
@@ -755,7 +758,8 @@ std::vector<ApplyMsg> Raft::getApplyLogs()
     return applyMsgs;
 }
 
-//这个应该是应用到客户端和服务端的管道的定时机制：定时将一些日志进行放入管道，以便客户端可以拿？
+//这个应该是应用到客户端和服务端的管道的定时机制：定时将一些日志进行放入管道
+//和kvserver进行一个沟通的，可以发现kvserver会进去pop操作，这里会进行push操作
 void Raft::applierTicker()
 {
     while(true){
@@ -924,10 +928,10 @@ void Raft::Snapshot(int index, std::string snapshot)
         return;
     }
     auto lastLogIndex = getLastLogIndex();  //为了检查snapshot前后日志是否一样，防止多截取或者少截取日志
-    //表示下一次需要快照的位置是index往后的部分你，因为往前部分都已经被快照了
+    //表示下一次需要快照的位置是index往后的部分，因为往前部分都已经被快照了
     int newLastSnapshotIncludeIndex = index;
     int newLastSnapshotIncludeTerm = m_logs[getSlicesIndexFromLogIndex(index)].logterm();
-    std::vector<raftRpcProctoc::LogEntry> trunckedLogs; //表示剩下的日志，这边忽略了真正快照的代码部分，是逻辑实现：利用这个变量
+    std::vector<raftRpcProctoc::LogEntry> trunckedLogs; //表示剩下的日志
     for (int i = index + 1; i <= getLastLogIndex(); i++) {
         //注意有=，因为要拿到最后一个日志
         trunckedLogs.push_back(m_logs[getSlicesIndexFromLogIndex(i)]);
@@ -938,8 +942,8 @@ void Raft::Snapshot(int index, std::string snapshot)
     //感觉这一步没有必要
     m_commitIndex = std::max(m_commitIndex, index);
     m_lastApplied = std::max(m_lastApplied, index);
-    //持久化的是快照以后的日志
-    m_persister->Save(persistData(), snapshot);
+    //持久化的是快照以后的日志,persistData()函数用来将其对应raft的信息进行序列化，并返回回去
+    m_persister->Save(persistData(), snapshot); //删除完前面的上一次快照这一次需要快照的位置中间的所有日志后，将其快照通过m_persister保存
 
     DPrintf("[SnapShot]Server %d snapshot snapshot index {%d}, term {%d}, loglen {%d}", m_me, index,
               m_lastSnapshotIncludeTerm, m_logs.size());

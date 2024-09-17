@@ -68,7 +68,7 @@ void KvServer::Get(google::protobuf::RpcController *controller, const ::raftKVRp
 
 KvServer::KvServer(int me, int maxraftstate, std::string nodeInforFileName, short port) : m_skipList(10)
 {
-    sleep(20);
+//    sleep(20);
     std::shared_ptr<Persister> persister = std::make_shared<Persister>(me); //待看使用
     m_me = me;
     //到什么时候需要进行日志快照
@@ -82,25 +82,31 @@ KvServer::KvServer(int me, int maxraftstate, std::string nodeInforFileName, shor
 
 
     //创建一个线程，注册一个rpc服务，以及启动这个rpc服务
+    //固然阻塞之后，这个kvserver的其中一个线程将会进行端口的监听
       std::thread t([this, port]() -> void {
     // provider是一个rpc网络服务对象。把UserService对象发布到rpc节点上
+    //创建一个注册中心
     RpcProvider provider;
+    //将对应的这个kvServer以及raft的服务创建在这个provider中
     provider.NotifyService(this);
-    std::cout<<"notify servicd now"<<std::endl;
+//    std::cout<<"notify servicd now"<<std::endl;
     provider.NotifyService(this->m_raftNode.get());  
         // 启动一个rpc服务发布节点   Run以后，进程进入阻塞状态，等待远程的rpc调用请求
-    std::cout<<"run now"<<std::endl;
         provider.Run(m_me, port);
     });
     t.detach();
 
     ////开启rpc远程调用能力，需要注意必须要保证所有节点都开启rpc接受功能之后才能开启rpc远程调用能力
     ////这里使用睡眠来保证
+    ////即这边通过这个线程，开启了当前raft结点的tcpserver服务器，用来进行监听其他raft结点的请求，
+    ////保证每个raft结点的服务都开启了，这样构造函数的下面才能与其他raft结点进行连接操作（后面才能进行远程通信，通过RPCUTIL这个类）
     std::cout << "raftServer node:" << m_me << " start to sleep to wait all ohter raftnode start!!!!" << std::endl;
     sleep(6);
     std::cout << "raftServer node:" << m_me << " wake up!!!! start to connect other raftnode" << std::endl;
     //获取所有raft节点ip、port ，并进行连接  ,要排除自己
     MprpcConfig config;
+    //nodeInforFileName这个其实就是针对test.conf这个配置文件
+    //这个配置文件包括了其他raft结点的信息
     config.LoadConfigFile(nodeInforFileName.c_str());
     std::vector<std::pair<std::string, short> > ipPortVt;
     for (int i = 0; i < INT_MAX - 1; ++i) {
@@ -122,13 +128,15 @@ KvServer::KvServer(int me, int maxraftstate, std::string nodeInforFileName, shor
         }
         std::string otherNodeIp = ipPortVt[i].first;
         short otherNodePort = ipPortVt[i].second;
+        //每一个kvserver都有多个RaftRpcUtil，每一个RaftRpcUtil内部都有一个channel通道，当我们使用RaftRpcUtil的时候进行对应方法的调用
+        //GRPC内部会将channel的内部方法进行回调,即进行CallMethod调用
         auto *rpc = new RaftRpcUtil(otherNodeIp, otherNodePort);
         servers.push_back(std::shared_ptr<RaftRpcUtil>(rpc));
 
         std::cout << "node" << m_me << " 连接node" << i << "success!" << std::endl;
     }
     sleep(ipPortVt.size() - me);  //等待所有节点相互连接成功，再启动raft
-    m_raftNode->init(servers, m_me, persister, applyChan);
+    m_raftNode->init(servers, m_me, persister, applyChan); //applyChan是和raft结点的通道，大概就是在raft结点中往kvserver这个地方存数据，然后kvserver再进行一个持久化？
     //  // kv的server直接与raft通信，但kv不直接与raft通信，所以需要把ApplyMsg的chan传递下去用于通信，两者的persist也是共用的
 
     m_skipList;
@@ -197,7 +205,8 @@ void KvServer::GetCommandFromRaft(ApplyMsg message)
             "Opreation {%s}, Key :{%s}, Value :{%s}",
             m_me, message.CommandIndex, &op.ClientId, op.RequestId, &op.Operation, &op.Key, &op.Value);    
 
-    //这个应该是快照的部分，不是日志的部分，固然得return 
+    //这个应该是快照的部分，不是日志的部分，固然得return
+    //换句话说，这个日志已经被保存过了，而且形式还是以快照的形式来保存的
     if (message.CommandIndex <= m_lastSnapShotRaftLogIndex) {
         return;
     }
@@ -212,8 +221,10 @@ void KvServer::GetCommandFromRaft(ApplyMsg message)
             ExecuteAppendOpOnKVDB(op);
         }
     }
-    //到这里kvDB已经制作了快照
+    ////到这里kvDB已经制作了快照
+    ////m_maxRaftState这个表示多少日志的数量要进行快照
     if (m_maxRaftState != -1) {
+        //判断是否需要快照，若要，内部会直接进行对应的操作
         IfNeedToSendSnapShotCommand(message.CommandIndex, 9);  //这个9感觉一点用都没有
         //如果raft的log太大（大于指定的比例）就把制作快照
     }
@@ -242,6 +253,8 @@ void KvServer::IfNeedToSendSnapShotCommand(int raftIndex, int proportion)
 std::string KvServer::MakeSnapShot() {
     std::lock_guard<std::mutex> lg(m_mtx);
     std::string snapshotData = getSnapshotData(); //在keserver.h头文件中
+    ////这边返回了对应序列化后的数据，比如当前kvserver的跳表（即文件中的数据）中的数据，当前kvserver的类（即这个类里面的所有数据）以及
+    ////raft结点与其他结点通信的数据（下一次应该往其他raft发送的数据下标应为多少）
     return snapshotData;
 }
 

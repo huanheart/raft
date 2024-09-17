@@ -139,7 +139,6 @@ Node<K, V> *SkipList<K, V>::create_node(const K k, const V v, int level) {
 }
 
 
-
 template <typename K, typename V>
 int SkipList<K, V>::insert_element(const K key, const V value) {
   _mtx.lock();

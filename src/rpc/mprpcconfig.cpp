@@ -30,9 +30,8 @@ std::string MprpcConfig::Load(const std::string & key)
 //负责加载配置文件
 void MprpcConfig::LoadConfigFile(const char * config_file)
 {
-    std::cout<<"go in"<<std::endl;
+//    std::cout<<"go in"<<std::endl;
     FILE * pf=fopen(config_file,"r");
-    std::cout<<"shdk h"<<std::endl;
     if(pf==nullptr){
         std::cout<<config_file<<" is not exist! "<<std::endl;
         exit(EXIT_FAILURE); //表示非标准退出
@@ -53,7 +52,7 @@ void MprpcConfig::LoadConfigFile(const char * config_file)
         // 解析配置项
         int idx = read_buf.find('=');
         if (idx == -1) {
-        // 配置项不合法
+            // 配置项不合法
             continue;
         }
         std::string key;

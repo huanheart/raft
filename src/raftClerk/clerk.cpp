@@ -37,6 +37,7 @@ std::string Clerk::Get(std::string key)
     return "";
 }
 
+//这个其实就是客户端和领导者通信的过程了
 void Clerk::PutAppend(std::string key, std::string value, std::string op)
 {
     //当前的请求+1

@@ -12,25 +12,28 @@
 
 int main(int argc, char **argv) {
   // https://askubuntu.com/questions/754213/what-is-difference-between-localhost-address-127-0-0-1-and-127-0-1-1
+  //可以发现和服务端需要连接的ip地址不同，但是其二者都属于本机的环回地址，固然依旧可以连接上，当然也可以统一写成127.0.0.1
   std::string ip = "127.0.1.1";
   short port = 7788;
 
   // 演示调用远程发布的rpc方法Login
+  //这边需要客户端绑定服务端的ip以及port，就是这个通道的地方了，内部会建立起一个连接
   fixbug::FiendServiceRpc_Stub stub(
-      new MprpcChannel(ip, port, true));  //注册进自己写的channel类，channel类用于自定义发送格式和负责序列化等操作
-  // rpc方法的请求参数
+      new MprpcChannel(ip, port, true) );  //注册进自己写的channel类，channel类用于自定义发送格式和负责序列化等操作
+  // rpc方法的请求参数,即创建一个请求
   fixbug::GetFriendsListRequest request;
   request.set_userid(1000);
   // rpc方法的响应
   fixbug::GetFriendsListResponse response;
   // 发起rpc方法的调用,消费这的stub最后都会调用到channel的 call_method方法  同步的rpc调用过程  MprpcChannel::callmethod
   MprpcController controller;
-  //長連接測試 ，發送10次請求
+  //長連接測試 ，发送10次請求
   int count = 10;
   while (count--) {
     std::cout << " 倒数" << count << "次发起RPC请求" << std::endl;
     stub.GetFriendsList(&controller, &request, &response, nullptr);
     // RpcChannel->RpcChannel::callMethod 集中来做所有rpc方法调用的参数序列化和网络发送
+    //由于是同步的RPC调用，固然下一步的时候就说明已经得到响应了
 
     // 一次rpc调用完成，读调用的结果
     // rpc调用是否失败由框架来决定（rpc调用失败 ！= 业务逻辑返回false）

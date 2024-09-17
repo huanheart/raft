@@ -21,9 +21,11 @@ int main(int argc, char **argv) {
   int nodeNum = 0;
   std::string configFileName;
   std::random_device rd;
-  std::mt19937 gen(rd());
+  std::mt19937 gen(rd());  //都是用于生成随机数的东西
   std::uniform_int_distribution<> dis(10000, 29999);
   unsigned short startPort = dis(gen);
+  //startPort这个是随机生成的端口号，范围在dis的两个参数那里
+  //两个选项分别是raft个数以及文件名
   while ((c = getopt(argc, argv, "n:f:")) != -1) {
     switch (c) {
       case 'n':
@@ -37,8 +39,10 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
     }
   }
+  //打开这个文件，第一个close以及创建文件感觉没什么意义
   std::ofstream file(configFileName, std::ios::out | std::ios::app);
   file.close();
+  //这里是直接trunc将之前的文件所对应的内容进行了一个清空
   file = std::ofstream(configFileName, std::ios::out | std::ios::trunc);
   if (file.is_open()) {
     file.close();
@@ -47,6 +51,7 @@ int main(int argc, char **argv) {
     std::cout << "无法打开 " << configFileName << std::endl;
     exit(EXIT_FAILURE);
   }
+  //开启服务到对应连续的端口上
   for (int i = 0; i < nodeNum; i++) {
     short port = startPort + static_cast<short>(i);
     std::cout << "start to create raftkv node:" << i << "    port:" << port << " pid:" << getpid() << std::endl;
@@ -55,9 +60,8 @@ int main(int argc, char **argv) {
     if (pid == 0) {
       // 如果是子进程
       // 子进程的代码
-      std::cout<<"第一次进入 128y128"<<std::endl;
+      //在子进程里面创建一个KVServer，去模拟远程其他raft的机器
       auto kvServer = new KvServer(i, 500, configFileName, port);
-      std::cout<<"进入 128y128"<<std::endl;
       pause();  // 子进程进入等待状态，不会执行 return 语句
     } else if (pid > 0) {
       // 如果是父进程
@@ -69,7 +73,7 @@ int main(int argc, char **argv) {
       exit(EXIT_FAILURE);
     }
   }
-  std::cout<<"bksdkhasdh "<<std::endl;
+  //如果有对应的信号发送过来，此时pause会接收到，否则将会阻塞在这里
   pause();
   return 0;
 }

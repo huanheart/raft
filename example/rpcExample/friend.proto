@@ -21,7 +21,7 @@ message GetFriendsListResponse  //请求，响应
     repeated bytes friends = 2;
 }
 
-// 好友模块
+// 好友模块,这FiendServiceRpc是一个类（指一个大的服务），里面包含了具体的请求-响应方法
 service FiendServiceRpc  //具体的服务模块和服务方法
 {
     rpc GetFriendsList(GetFriendsListRequest) returns(GetFriendsListResponse);
