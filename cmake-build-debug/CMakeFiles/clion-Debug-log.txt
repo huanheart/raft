@@ -1,4 +1,0 @@
-Cannot generate into /home/lkt/raft/cmake-build-debug
-It is already used for project /home/lkt/web
-
-Please either delete it manually or select another generation directory

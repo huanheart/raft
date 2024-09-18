@@ -1,1 +1,0 @@
-/usr/bin/c++ -g CMakeFiles/test_scheduler.dir/test_scheduler.cpp.o -o ../../../bin/test_scheduler   -L/home/lkt/web/lib  -Wl,-rpath,/home/lkt/web/lib ../../../lib/libfiber_lib.a -lpthread -ldl -ldl 
